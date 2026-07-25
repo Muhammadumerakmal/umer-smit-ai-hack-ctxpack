@@ -1,6 +1,6 @@
 # Tasks: ctxpack — Context Packing CLI
 
-**Feature**: `001-ctxpack-cli` | **Spec**: [spec.md](./spec.md) · [root SPEC.md](../../SPEC.md) | **Plan**: [plan.md](./plan.md)
+**Feature**: `main` | **Spec**: [spec.md](./spec.md) · [root SPEC.md](../../SPEC.md) | **Plan**: [plan.md](./plan.md)
 **Tech**: Python 3.10+, standard library only, `unittest`. Single-file `ctxpack.py` at repo root.
 
 Test-first (red) is noted where practical. `[P]` = parallelizable (different files, no incomplete deps).

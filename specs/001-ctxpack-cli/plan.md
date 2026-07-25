@@ -1,6 +1,6 @@
 # Implementation Plan: ctxpack — Context Packing CLI
 
-**Branch**: `001-ctxpack-cli` | **Date**: 2026-07-25 | **Spec**: [spec.md](./spec.md) · [root SPEC.md](../../SPEC.md)
+**Branch**: `main` | **Date**: 2026-07-25 | **Spec**: [spec.md](./spec.md) · [root SPEC.md](../../SPEC.md)
 **Input**: Feature specification from `specs/001-ctxpack-cli/spec.md`
 
 ## Summary

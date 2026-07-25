@@ -1,6 +1,6 @@
 # Feature Specification: ctxpack — Context Packing CLI
 
-**Feature Branch**: `001-ctxpack-cli`
+**Feature Branch**: `main`
 **Created**: 2026-07-25
 **Status**: Draft
 **Input**: Build a Python stdlib-only CLI that packs the most task-relevant files from a folder into a token-budgeted markdown bundle, with an honest manifest of what was included/excluded and why.
