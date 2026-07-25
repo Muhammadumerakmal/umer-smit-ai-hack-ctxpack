@@ -18,3 +18,42 @@
 │  ○ /sp.checklist (optional) - Generate quality checklists to validate requirements completeness, clarity, and        │
 │  consistency (after /sp.plan)                                                                                        │
 │                                                        
+
+
+
+#==================================================================================================================================================================================#
+
+Here's the command to run ctxpack. From the repo root:
+
+Basic run
+
+python ctxpack.py --path . --task "how does ranking and budget work" --budget 4000
+Bundle prints to the screen; a one-line summary goes to stderr.
+
+Run + save both outputs (best for the demo)
+
+python ctxpack.py --path . --task "fix the budget logic" --budget 6000 --out bundle.md --manifest manifest.json
+Then open bundle.md (the packed context) and manifest.json (what was included/excluded and why).
+
+The 4 flags
+
+┌────────────────────┬────────────────────────────────────────────────────┐
+│        Flag        │                      Meaning                       │
+├────────────────────┼────────────────────────────────────────────────────┤
+│ --path             │ folder to pack (required)                          │
+├────────────────────┼────────────────────────────────────────────────────┤
+│ --task             │ what you're working on (required)                  │
+├────────────────────┼────────────────────────────────────────────────────┤
+│ --budget           │ max tokens for the whole bundle (required)         │
+├────────────────────┼────────────────────────────────────────────────────┤
+│ --out / --manifest │ write to files instead of stdout/stderr (optional) │
+└────────────────────┴────────────────────────────────────────────────────┘
+
+Run the tests (proves it all works)
+
+python -m unittest discover -s tests -v
+
+Quickest demo line — point it at itself:
+python ctxpack.py --path . --task "explain the ranking strategy" --budget 3000
+
+Want me to run that last one now and show you the output?
