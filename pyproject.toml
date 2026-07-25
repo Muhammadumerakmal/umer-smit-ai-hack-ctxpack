@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ctxpack"
+version = "0.1.0"
+description = "Pack the most task-relevant files from a folder into a token-budgeted markdown bundle."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Standard library only — intentionally no runtime dependencies.
+dependencies = []
+
+[project.scripts]
+ctxpack = "ctxpack:main_console"
+
+[tool.setuptools]
+py-modules = ["ctxpack"]
