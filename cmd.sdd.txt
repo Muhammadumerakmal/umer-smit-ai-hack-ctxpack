@@ -1,0 +1,20 @@
+1. You're already in the project directory!                                                                         │
+│  2. Start using slash commands with your AI agent:                                                                   │
+│     2.1 /sp.constitution - Establish project principles                                                              │
+│     2.2 /sp.specify - Create baseline specification                                                                  │
+│     2.3 /sp.plan - Create implementation plan                                                                        │
+│     2.4 /sp.tasks - Generate actionable tasks                                                                        │
+│     2.5 /sp.implement - Execute implementation                                                                       │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭──────────────────────────────────────────────── Enhancement Commands ────────────────────────────────────────────────╮
+│                                                                                                                      │
+│  Optional commands that you can use for your specs (improve quality & confidence)                                    │
+│                                                                                                                      │
+│  ○ /sp.clarify (optional) - Ask structured questions to de-risk ambiguous areas before planning (run before          │
+│  /sp.plan if used)                                                                                                   │
+│  ○ /sp.analyze (optional) - Cross-artifact consistency & alignment report (after /sp.tasks, before /sp.implement)    │
+│  ○ /sp.checklist (optional) - Generate quality checklists to validate requirements completeness, clarity, and        │
+│  consistency (after /sp.plan)                                                                                        │
+│                                                        
