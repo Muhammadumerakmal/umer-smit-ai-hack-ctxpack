@@ -13,6 +13,7 @@ the ceiling is exact and additive (no rounding drift).
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -32,6 +33,11 @@ TREE_BUDGET_FRACTION = 0.15   # include the structure tree only if it costs <= t
 MIN_SLICE_CHARS = 40          # a head-slice smaller than this is not worth emitting
 
 SNIFF_BYTES = 8192      # bytes inspected for a NUL when detecting binary files
+MAX_FILE_BYTES = 5 * 1024 * 1024   # per-file read cap; larger files are excluded (memory-DoS guard)
+
+# _minified_reason thresholds (named for defensibility)
+MINIFIED_AVG_LINE_LEN = 400   # average line length above which content looks minified
+MINIFIED_MAX_LINES = 5        # ...and only when there are very few lines
 
 # Directories that are conventionally generated/vendored/VCS sinks. This is a
 # convenience PRIOR, not the mechanism -- the real gate is a structural signal
@@ -167,7 +173,7 @@ def _minified_reason(content: str) -> str | None:
         return None
     avg_len = sum(len(ln) for ln in non_empty) / len(non_empty)
     # A handful of extremely long lines is the signature of a minified/generated asset.
-    if avg_len > 400 and len(non_empty) <= 5:
+    if avg_len > MINIFIED_AVG_LINE_LEN and len(non_empty) <= MINIFIED_MAX_LINES:
         return "minified/generated asset (extreme line length)"
     return None
 
@@ -176,7 +182,20 @@ def walk(root: Path) -> list[FileRec]:
     """Recursively discover files. Readable UTF-8 text becomes a candidate;
     everything else is recorded with an exclusion reason. Never raises for a file."""
     recs: list[FileRec] = []
-    for dirpath, dirnames, filenames in os.walk(root):
+
+    def _on_walk_error(err: OSError) -> None:
+        # os.walk defaults to onerror=None, which SILENTLY skips unreadable
+        # directories -- their files would vanish from the manifest. Record them
+        # instead so every path stays accounted for.
+        fn = getattr(err, "filename", None) or str(root)
+        try:
+            drel = os.path.relpath(fn, root).replace(os.sep, "/")
+        except ValueError:
+            drel = str(fn)
+        recs.append(FileRec(path=drel, abs_path=Path(fn),
+                            excluded_reason="unreadable directory"))
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_on_walk_error):
         dirnames.sort()      # determinism: fix traversal order (does not affect output, but tidy)
         filenames.sort()
         for name in filenames:
@@ -186,6 +205,24 @@ def walk(root: Path) -> list[FileRec]:
             vreason = _vendored_reason(rel)
             if vreason is not None:
                 recs.append(FileRec(path=rel, abs_path=abs_path, excluded_reason=vreason))
+                continue
+
+            # Do NOT follow symlinks: a symlinked file could point outside --path
+            # (e.g. /etc/passwd, an SSH key). Record it, never read through it.
+            if abs_path.is_symlink():
+                recs.append(FileRec(path=rel, abs_path=abs_path,
+                                    excluded_reason="symlink (not followed)"))
+                continue
+
+            # Size-gate BEFORE reading so a giant file can't exhaust memory.
+            try:
+                size = abs_path.stat().st_size
+            except OSError:
+                recs.append(FileRec(path=rel, abs_path=abs_path, excluded_reason="unreadable file"))
+                continue
+            if size > MAX_FILE_BYTES:
+                recs.append(FileRec(path=rel, abs_path=abs_path,
+                                    excluded_reason=f"file too large (> {MAX_FILE_BYTES // (1024 * 1024)} MB)"))
                 continue
 
             try:
@@ -248,36 +285,66 @@ def rank(files: list[FileRec], task: str) -> list[FileRec]:
 # --------------------------------------------------------------------------- #
 # render / truncate / pack -- budget is absolute (enforced in characters)
 # --------------------------------------------------------------------------- #
+def _fence_for(body: str) -> str:
+    """Return a backtick fence guaranteed longer than any backtick run in `body`.
+
+    Without this, a file whose content contains a ``` line would close the fence
+    early, letting the rest of the file render as live markdown -- an injection
+    vector (attacker-authored '## SYSTEM OVERRIDE' headings become real headings).
+    """
+    longest = run = 0
+    for ch in body:
+        if ch == "`":
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 0
+    return "`" * max(3, longest + 1)
+
+
+def _safe_label(path: str) -> str:
+    """Neutralise characters in a filename that could break markdown structure
+    when shown in a heading or the tree (backticks, newlines, carriage returns)."""
+    return path.replace("`", "'").replace("\r", " ").replace("\n", " ")
+
+
 def _render_block(path: str, body: str) -> str:
-    return f"## {path}\n\n```\n{body}\n```\n\n"
+    fence = _fence_for(body)
+    return f"## {_safe_label(path)}\n\n{fence}\n{body}\n{fence}\n\n"
 
 
 def _build_tree(paths: list[str]) -> str:
     """A compact, deterministic structure overview of the given paths."""
-    lines = ["## Structure", "", "```"]
+    body_lines = []
     for p in sorted(paths):
         depth = p.count("/")
-        lines.append("  " * depth + p.rsplit("/", 1)[-1] + ("" if "." in p.rsplit("/", 1)[-1] else "/"))
-    lines.append("```")
-    lines.append("")
-    return "\n".join(lines) + "\n"
+        body_lines.append("  " * depth + _safe_label(p.rsplit("/", 1)[-1]))
+    body = "\n".join(body_lines)
+    fence = _fence_for(body)
+    return f"## Structure\n\n{fence}\n{body}\n{fence}\n\n"
 
 
 def truncate_to_fit(content: str, path: str, remaining_chars: int) -> tuple[str, bool]:
     """Return (block, ok). Head-slice `content` so its rendered block fits in
-    remaining_chars, appending a visible marker. ok=False if no useful slice fits."""
-    empty_overhead = len(_render_block(path, ""))
+    remaining_chars, appending a visible marker. ok=False if no useful slice fits.
+
+    The rendered fence can grow if the head slice contains backtick runs, so we
+    build the block and shrink the head until it provably fits -- the budget
+    ceiling is absolute and must never be exceeded."""
     total_tokens = count_tokens(content)
-    # Reserve the widest possible marker (both numbers = total_tokens is an upper bound).
+    empty_overhead = len(_render_block(path, ""))
     marker_reserve = len(f"\n\n... [truncated: {total_tokens} of {total_tokens} tokens shown]")
     head_chars = remaining_chars - empty_overhead - marker_reserve
-    if head_chars < MIN_SLICE_CHARS:
-        return "", False
-    head = content[:head_chars]
-    shown = count_tokens(head)
-    marker = f"\n\n... [truncated: {shown} of {total_tokens} tokens shown]"
-    block = _render_block(path, head + marker)
-    return block, True
+    while head_chars >= MIN_SLICE_CHARS:
+        head = content[:head_chars]
+        shown = count_tokens(head)
+        marker = f"\n\n... [truncated: {shown} of {total_tokens} tokens shown]"
+        block = _render_block(path, head + marker)
+        if len(block) <= remaining_chars:
+            return block, True
+        # Fence/marker made it overflow; cut the head by the overflow and retry.
+        head_chars -= max(len(block) - remaining_chars, 1)
+    return "", False
 
 
 def pack(ranked: list[FileRec], budget: int, task: str) -> tuple[list[dict], list[dict], str]:
@@ -326,8 +393,12 @@ def pack(ranked: list[FileRec], budget: int, task: str) -> tuple[list[dict], lis
                                     "reason": "insufficient remaining budget"})
 
     bundle = "".join(parts)
-    # Final guard: the invariant must hold exactly.
-    assert count_tokens(bundle) <= budget, "budget invariant violated"
+    # Final guard: the invariant must hold EXACTLY. Use an explicit raise, not
+    # assert -- assert statements are stripped under `python -O`/PYTHONOPTIMIZE,
+    # which would silently disable the tool's single most important guarantee.
+    if count_tokens(bundle) > budget:
+        raise RuntimeError(
+            f"budget invariant violated: {count_tokens(bundle)} > {budget}")
     return included, budget_excluded, bundle
 
 
@@ -346,7 +417,6 @@ def build_manifest(budget: int, bundle: str, included: list[dict],
 
 
 def _manifest_json(manifest: dict) -> str:
-    import json
     return json.dumps(manifest, ensure_ascii=True, indent=2, separators=(",", ": "))
 
 
@@ -399,7 +469,9 @@ def main(argv: list[str]) -> int:
             print(summary, file=sys.stderr)
         return 0
     except Exception as e:  # never leak a traceback
-        print(f"ctxpack: error: {e}", file=sys.stderr)
+        # Include the exception type so an internal failure is diagnosable, while
+        # still honouring the one-line-to-stderr / no-traceback contract.
+        print(f"ctxpack: error: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
 
 

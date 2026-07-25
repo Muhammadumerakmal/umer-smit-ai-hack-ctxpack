@@ -29,6 +29,21 @@ each hidden-test category is unambiguous. No open questions remained that requir
 - Q: How is the "never exceed by one token" budget invariant enforced exactly? → A: because
   `tokens = ceil(len/4)`, `ceil(len(bundle)/4) ≤ budget` iff `len(bundle) ≤ budget × 4`; the packer enforces the
   budget in characters (`char_budget = budget × 4`), making the ceiling exact and additive with no rounding drift.
+  The final guard is an explicit `raise` (not `assert`), so it survives `python -O`.
+
+### Session 2026-07-25 (security hardening)
+
+Added after a review pass (silent-failure/python/security agents). New exclusion reasons appear in the manifest:
+
+- Q: How is markdown-injection via file content prevented? → A: each fenced block uses a **dynamic fence**
+  (longest backtick run + 1), so a file containing a ``` line cannot break out and render injected headings as
+  live markdown. Filenames shown in headings/tree are also sanitized (backticks/control chars neutralized).
+- Q: Are symlinks followed? → A: no. A symlinked file is excluded with reason `"symlink (not followed)"` and
+  never read, preventing disclosure of files outside `--path`.
+- Q: Is there a per-file size limit? → A: yes, files over a 5 MB cap are excluded with `"file too large (> 5 MB)"`
+  *before* being read, bounding memory against a giant-file DoS.
+- Q: What happens to an unreadable subdirectory? → A: it is recorded (`"unreadable directory"`) via
+  `os.walk(onerror=…)` rather than silently skipped, keeping the manifest complete.
 
 ## User Scenarios & Testing *(mandatory)*
 

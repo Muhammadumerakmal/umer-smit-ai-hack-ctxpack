@@ -188,7 +188,20 @@ every file walked. All lists are sorted deterministically.
 
 Files may contain text engineered to manipulate an AI that reads the bundle. `ctxpack` treats **all file
 content as inert data**: content is placed inside fenced blocks and never interpreted as instructions to the
-tool. The tool makes no network calls and executes no file content.
+tool. The tool makes no network calls and executes no file content. Specific hardening:
+
+- **Fence breakout prevented.** Each block uses a **dynamic fence** longer than the longest backtick run in the
+  content, so a file containing a ``` line cannot close the fence early and smuggle live markdown headings
+  (e.g. a fake `## SYSTEM OVERRIDE`) into the bundle.
+- **Filenames sanitized** in headings/tree (backticks and control characters neutralized) so a crafted filename
+  cannot corrupt markdown structure. The JSON manifest is already safe via `json.dumps`.
+- **Symlinks are not followed.** A symlinked file (which could point outside `--path`, e.g. an SSH key) is
+  recorded as `excluded: "symlink (not followed)"` and never read — closing a path-traversal/exfiltration vector.
+- **Per-file size cap.** Files larger than a fixed cap are excluded (`"file too large (> N MB)"`) *before* being
+  read, bounding worst-case memory against a giant-file DoS.
+- **Unreadable directories are recorded**, not silently skipped (`os.walk(onerror=…)`), preserving honest accounting.
+- **Budget guard uses an explicit `raise`, not `assert`**, so the "never exceed budget" invariant holds even under
+  `python -O` / `PYTHONOPTIMIZE`.
 
 ## 13. Test Categories We Build For
 

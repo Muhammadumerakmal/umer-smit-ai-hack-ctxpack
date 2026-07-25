@@ -12,14 +12,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CTXPACK = REPO_ROOT / "ctxpack.py"
 
 
-def run_cli(args, cwd=None):
-    """Invoke `python ctxpack.py <args>` as a real subprocess.
+def run_cli(args, cwd=None, py_flags=None):
+    """Invoke `python [py_flags] ctxpack.py <args>` as a real subprocess.
 
     Returns (returncode, stdout_bytes, stderr_text). Using a subprocess exercises
     the true entry point, exit codes, and byte-exact stdout (for determinism).
+    `py_flags` (e.g. ["-O"]) are passed to the interpreter itself.
     """
+    cmd = [sys.executable, *(py_flags or []), str(CTXPACK), *args]
     proc = subprocess.run(
-        [sys.executable, str(CTXPACK), *args],
+        cmd,
         cwd=str(cwd) if cwd else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

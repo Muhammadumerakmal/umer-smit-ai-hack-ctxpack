@@ -34,7 +34,11 @@ Lesson: generated glue code (packaging, entry points) needs the same verificatio
 
 - Add `.gitignore`-awareness (STRETCH) and a proper "smart slice" that prefers imports/definitions.
 - Add a performance pass + timing assertion for the 3,000-file case (currently we assert completion, not <30s).
-- Harden the fence rule so file content containing long back-tick runs can never break the markdown fence.
+- Add an aggregate-bytes circuit breaker (we added a per-file 5 MB cap; a whole-tree cap would bound memory further).
+
+> Note: a review pass (silent-failure / python / security review agents) hardened the tool against a markdown
+> fence-breakout injection, symlink exfiltration, oversized-file memory DoS, and the `assert`-under-`-O` gap —
+> those are now fixed and covered by `tests/test_security.py`, not left for "two more hours".
 
 ## 5. Who wrote what — per person
 
