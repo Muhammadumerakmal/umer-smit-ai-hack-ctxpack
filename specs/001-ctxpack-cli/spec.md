@@ -5,6 +5,31 @@
 **Status**: Draft
 **Input**: Build a Python stdlib-only CLI that packs the most task-relevant files from a folder into a token-budgeted markdown bundle, with an honest manifest of what was included/excluded and why.
 
+## Clarifications
+
+Retrospective de-risking pass. Each point below was already an implemented, test-passing decision in
+`ctxpack.py`; the values are recorded here so the spec and the code cannot drift, and so the behavior against
+each hidden-test category is unambiguous. No open questions remained that required a decision from the author.
+
+### Session 2026-07-25
+
+- Q: Exact ranking tie-break order? → A: `(-score, content_tokens_asc, posix_path_asc)` — score desc, then
+  cheaper file first (maximizes files per budget), then POSIX path as the absolute tie-break (total order → determinism).
+- Q: When is the project-structure tree affordable enough to include? → A: include only if its rendered token
+  cost ≤ 15% of the total budget (`TREE_BUDGET_FRACTION = 0.15`) **and** it still fits remaining budget; otherwise it is dropped.
+- Q: Minimum useful head-slice before truncation is worth emitting? → A: at least 40 characters of content after
+  block overhead and the truncation marker (`MIN_SLICE_CHARS = 40`); below that the file is excluded with reason
+  `"insufficient remaining budget"`.
+- Q: How is an empty (or all-stopword) `--task` handled? → A: path/content keyword signals evaluate to 0, so
+  ranking falls back deterministically to the minor signals — shallower files first, then source-code extension,
+  then cheaper file, then POSIX path. Never a crash; output stays deterministic.
+- Q: Are files inside vendored/VCS directories pruned or listed? → A: listed. They are recorded in the manifest
+  `excluded` with a reason (e.g. `"vendored/generated directory (node_modules)"`), never silently dropped, so
+  every considered file is accounted for. Their content is not read (I/O saved) but they still appear.
+- Q: How is the "never exceed by one token" budget invariant enforced exactly? → A: because
+  `tokens = ceil(len/4)`, `ceil(len(bundle)/4) ≤ budget` iff `len(bundle) ≤ budget × 4`; the packer enforces the
+  budget in characters (`char_budget = budget × 4`), making the ceiling exact and additive with no rounding drift.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Pack a repo for a task within a budget (Priority: P1)
