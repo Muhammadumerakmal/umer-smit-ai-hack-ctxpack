@@ -157,7 +157,7 @@ def _vendored_reason(rel_posix: str) -> str | None:
     return None
 
 
-def _lockfile_reason(rel_posix: str, content: str) -> str | None:
+def _lockfile_reason(rel_posix: str) -> str | None:
     name = rel_posix.rsplit("/", 1)[-1].lower()
     if name.endswith(".lock") or "-lock." in name or name in {"package-lock.json", "yarn.lock", "poetry.lock", "pnpm-lock.yaml"}:
         return "lockfile / generated (low-signal) content"
@@ -243,7 +243,7 @@ def walk(root: Path) -> list[FileRec]:
             # Normalise line endings so output is byte-identical across OSes.
             text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-            reason = _lockfile_reason(rel, text) or _minified_reason(text)
+            reason = _lockfile_reason(rel) or _minified_reason(text)
             if reason is not None:
                 recs.append(FileRec(path=rel, abs_path=abs_path, excluded_reason=reason))
                 continue
@@ -347,7 +347,7 @@ def truncate_to_fit(content: str, path: str, remaining_chars: int) -> tuple[str,
     return "", False
 
 
-def pack(ranked: list[FileRec], budget: int, task: str) -> tuple[list[dict], list[dict], str]:
+def pack(ranked: list[FileRec], budget: int) -> tuple[list[dict], list[dict], str]:
     """Greedy fill under an absolute character budget (= budget * 4).
 
     Returns (included_entries, budget_excluded_entries, bundle_string)."""
@@ -453,7 +453,7 @@ def main(argv: list[str]) -> int:
                         for r in recs if not r.is_candidate]
 
         ranked = rank(candidates, args.task)
-        included, budget_excluded, bundle = pack(ranked, args.budget, args.task)
+        included, budget_excluded, bundle = pack(ranked, args.budget)
 
         manifest = build_manifest(args.budget, bundle, included,
                                   pre_excluded + budget_excluded)
